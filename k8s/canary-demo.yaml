@@ -1,0 +1,89 @@
+# Rollit Kubernetes canary demo: isolated namespace and two REAL workloads.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rollit-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rollit-stable
+  namespace: rollit-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: rollit-workload, track: stable}
+  template:
+    metadata:
+      labels: {app: rollit-workload, track: stable}
+    spec:
+      containers:
+        - name: workload
+          image: rollit:local
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "app.workload:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports: [{containerPort: 8000}]
+          env:
+            - {name: APP_VERSION, value: "v1.0.0"}
+            - {name: ERROR_PROBABILITY, value: "0"}
+            - {name: EXTRA_LATENCY_MS, value: "0"}
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 192Mi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rollit-canary
+  namespace: rollit-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: rollit-workload, track: canary}
+  template:
+    metadata:
+      labels: {app: rollit-workload, track: canary}
+    spec:
+      containers:
+        - name: workload
+          image: rollit:local
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "app.workload:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports: [{containerPort: 8000}]
+          env:
+            - {name: APP_VERSION, value: "v1.1.0"}
+            - {name: ERROR_PROBABILITY, value: "0.4"}
+            - {name: EXTRA_LATENCY_MS, value: "550"}
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 192Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rollit-stable
+  namespace: rollit-demo
+spec:
+  selector: {app: rollit-workload, track: stable}
+  ports: [{name: http, port: 80, targetPort: 8000}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rollit-canary
+  namespace: rollit-demo
+spec:
+  selector: {app: rollit-workload, track: canary}
+  ports: [{name: http, port: 80, targetPort: 8000}]

@@ -1,0 +1,24 @@
+services:
+  rollit:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-local-demo-only}
+      MIN_SAMPLES: 20
+    restart: unless-stopped
+  prometheus:
+    image: prom/prometheus:v3.3.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["9090:9090"]
+    depends_on: [rollit]
+  grafana:
+    image: grafana/grafana:11.6.1
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-change-me-local}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on: [prometheus]
